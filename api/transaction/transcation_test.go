@@ -3,6 +3,9 @@ package transaction
 import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/KKGo-Software-engineering/workshop-summer/api/errs"
+	"github.com/KKGo-Software-engineering/workshop-summer/api/utils"
+	cv "github.com/KKGo-Software-engineering/workshop-summer/api/validator"
+	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"net/http"
@@ -14,63 +17,115 @@ import (
 func TestUpdateTransactionByID(t *testing.T) {
 	t.Run("given transaction information should update transaction", func(t *testing.T) {
 		e := echo.New()
+		e.Validator = &cv.CustomValidator{Validator: validator.New()}
 		defer e.Close()
 
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"date": "2024-05-11 15:04:05","amount": 25.5,"category": "food","transaction_type": "income","note": "","image_url": ""}`))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
+		type Mock struct {
+			Arg          Transaction
+			ReturningRow Transaction
+		}
 
-		db, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-		defer db.Close()
-		h := New(db)
+		type TestCase struct {
+			Request  string
+			Expected string
+			Mock     Mock
+		}
 
-		row := sqlmock.NewRows([]string{"date", "amount", "category", "transaction_type", "note", "image_url"}).AddRow("2024-05-11 15:04:05", 25.5, "food", "income", "", "")
-		mock.ExpectQuery(updateTxStmt).WithArgs("2024-05-11 15:04:05", 25.5, "food", "income", "", "", 0).WillReturnRows(row)
+		cols := []string{"date", "amount", "category", "transaction_type", "note", "image_url"}
+		tcs := []TestCase{
+			{
+				Request:  `{"date": "2024-05-11 15:04:05","amount": 25.5,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
+				Expected: `{"date": "2024-05-11 15:04:05","amount": 25.5,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
+				Mock: Mock{
+					Arg: Transaction{
+						Date:            "2024-05-11 15:04:05",
+						Amount:          25.5,
+						Category:        "food",
+						TransactionType: "income",
+						Note:            "",
+						ImageURL:        "",
+					},
+					ReturningRow: Transaction{
+						Date:            "2024-05-11 15:04:05",
+						Amount:          25.5,
+						Category:        "food",
+						TransactionType: "income",
+						Note:            "",
+						ImageURL:        "",
+					},
+				},
+			},
+			{
+				Request:  `{"date": "2024-05-11 15:04:05","amount": 30,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
+				Expected: `{"date": "2024-05-11 15:04:05","amount": 30,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
+				Mock: Mock{
+					Arg: Transaction{
+						Date:            "2024-05-11 15:04:05",
+						Amount:          30,
+						Category:        "food",
+						TransactionType: "income",
+						Note:            "",
+						ImageURL:        "",
+					},
+					ReturningRow: Transaction{
+						Date:            "2024-05-11 15:04:05",
+						Amount:          30,
+						Category:        "food",
+						TransactionType: "income",
+						Note:            "",
+						ImageURL:        "",
+					},
+				},
+			},
+		}
 
-		err := h.Update(c)
+		for _, tc := range tcs {
+			req := httptest.NewRequest(http.MethodPut, "/transactions/1", strings.NewReader(tc.Request))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/transactions/:id")
+			params := utils.KeyValuePairs{"id": "1"}
+			utils.SetParams(c, params)
 
-		expected := `{"date": "2024-05-11 15:04:05","amount": 25.5,"category": "food","transaction_type": "income","note": "","image_url": ""}`
+			db, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+			defer db.Close()
+			h := New(db)
 
-		assert.Nil(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.JSONEq(t, expected, rec.Body.String())
-	})
+			returningRow := tc.Mock.ReturningRow
+			arg := tc.Mock.Arg
+			row := sqlmock.NewRows(cols).AddRow(returningRow.Date, returningRow.Amount, returningRow.Category, returningRow.TransactionType, returningRow.Note, returningRow.ImageURL)
+			mock.ExpectQuery(updateTxStmt).WithArgs(arg.Date, arg.Amount, arg.Category, arg.TransactionType, arg.Note, arg.ImageURL, 1).WillReturnRows(row)
 
-	t.Run("given transaction information should update transaction", func(t *testing.T) {
-		e := echo.New()
-		defer e.Close()
+			err := h.Update(c)
 
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"date": "2024-05-11 15:04:05","amount": 30,"category": "food","transaction_type": "income","note": "","image_url": ""}`))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		db, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-		defer db.Close()
-
-		h := New(db)
-
-		row := sqlmock.NewRows([]string{"date", "amount", "category", "transaction_type", "note", "image_url"}).AddRow("2024-05-11 15:04:05", 30, "food", "income", "", "")
-		mock.ExpectQuery(updateTxStmt).WithArgs("2024-05-11 15:04:05", float64(30), "food", "income", "", "", 0).WillReturnRows(row)
-
-		err := h.Update(c)
-
-		expected := `{"date": "2024-05-11 15:04:05","amount": 30,"category": "food","transaction_type": "income","note": "","image_url": ""}`
-
-		assert.Nil(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.JSONEq(t, expected, rec.Body.String())
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.JSONEq(t, tc.Expected, rec.Body.String())
+		}
 	})
 
 	t.Run("given valid information should return error when database failed", func(t *testing.T) {
 		e := echo.New()
+		e.Validator = &cv.CustomValidator{Validator: validator.New()}
 		defer e.Close()
 
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"date": "2024-05-11 15:04:05","amount": 30,"category": "food","transaction_type": "income","note": "","image_url": ""}`))
+		arg := Transaction{
+			Date:            "2024-05-11 15:04:05",
+			Amount:          30,
+			Category:        "food",
+			TransactionType: "income",
+			Note:            "",
+			ImageURL:        "",
+		}
+
+		req := httptest.NewRequest(http.MethodPut, "/transactions/1", strings.NewReader(`{"date": "2024-05-11 15:04:05","amount": 30,"category": "food","transaction_type": "income","note": "","image_url": ""}`))
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		c.SetPath("/transactions/:id")
+		params := utils.KeyValuePairs{"id": "1"}
+		utils.SetParams(c, params)
 
 		db, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		defer db.Close()
@@ -78,10 +133,123 @@ func TestUpdateTransactionByID(t *testing.T) {
 		h := New(db)
 
 		mockErr := errs.ErrInternalDatabaseError
-		mock.ExpectQuery(updateTxStmt).WithArgs("2024-05-11 15:04:05", float64(30), "food", "income", "", "", 0).WillReturnError(mockErr)
+		mock.ExpectQuery(updateTxStmt).WithArgs(arg.Date, arg.Amount, arg.Category, arg.TransactionType, arg.Note, arg.ImageURL, 1).WillReturnError(mockErr)
 
-		h.Update(c)
+		err := h.Update(c)
+
+		expected := `{"messages":["internal database error"]}`
 
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.NoError(t, err)
+		assert.JSONEq(t, expected, rec.Body.String())
+	})
+
+	t.Run("given invalid request body should return error", func(t *testing.T) {
+		e := echo.New()
+		e.Validator = &cv.CustomValidator{Validator: validator.New()}
+		defer e.Close()
+
+		type TestCase struct {
+			Request  string
+			Expected string
+		}
+
+		tcs := []TestCase{
+			{
+				Request:  `{"date": "2024-05-11 15:04:05","amount": 0,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
+				Expected: `{"messages":["field Amount is required"]}`,
+			},
+			{
+				Request:  `{"date": "2024-05-11 15:04:05","amount": -1,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
+				Expected: `{"messages":["the value of Amount must be greater than 0"]}`,
+			},
+			{
+				Request:  `{"date": "2024-05-11 15:04:05","amount": 25,"category": "food","transaction_type": "invalid-transaction-type","note": "","image_url": ""}`,
+				Expected: `{"messages":["the value of TransactionType must be one of income expense"]}`,
+			},
+			{
+				Request:  `{"date": "2024-05-11 15:04:05","amount": 25,"category": "","transaction_type": "income","note": "","image_url": ""}`,
+				Expected: `{"messages":["field Category is required"]}`,
+			},
+			{
+				Request:  `{"date": "2024-05-11 15:04:05","amount": 25,"category": "","transaction_type": "","note": "","image_url": ""}`,
+				Expected: `{"messages":["field Category is required","field TransactionType is required"]}`,
+			},
+			{
+				Request:  `{"date": "2024-05-11 15:04:05","amount": -1,"category": "","transaction_type": "","note": "","image_url": ""}`,
+				Expected: `{"messages":["the value of Amount must be greater than 0","field Category is required","field TransactionType is required"]}`,
+			},
+		}
+
+		for _, tc := range tcs {
+			req := httptest.NewRequest(http.MethodPut, "/transactions/1", strings.NewReader(tc.Request))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/transactions/:id")
+			params := utils.KeyValuePairs{"id": "1"}
+			utils.SetParams(c, params)
+
+			db, _, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+			defer db.Close()
+
+			h := New(db)
+
+			err := h.Update(c)
+
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.JSONEq(t, tc.Expected, rec.Body.String())
+		}
+	})
+
+	t.Run("given invalid ID should return error", func(t *testing.T) {
+		e := echo.New()
+		e.Validator = &cv.CustomValidator{Validator: validator.New()}
+		defer e.Close()
+
+		req := httptest.NewRequest(http.MethodPut, "/transactions/1", strings.NewReader(`{"date": "2024-05-11 15:04:05","amount": 30,"category": "food","transaction_type": "income","note": "","image_url": ""}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/transactions/:id")
+		params := utils.KeyValuePairs{"id": "invalid-id"}
+		utils.SetParams(c, params)
+
+		db, _, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		defer db.Close()
+
+		h := New(db)
+
+		err := h.Update(c)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.JSONEq(t, `{"messages":["strconv.Atoi: parsing \"invalid-id\": invalid syntax"]}`, rec.Body.String())
+	})
+
+	t.Run("given invalid request body format should return error", func(t *testing.T) {
+		e := echo.New()
+		e.Validator = &cv.CustomValidator{Validator: validator.New()}
+		defer e.Close()
+
+		req := httptest.NewRequest(http.MethodPut, "/transactions/1", strings.NewReader(`[]`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/transactions/:id")
+		params := utils.KeyValuePairs{"id": "1"}
+		utils.SetParams(c, params)
+
+		db, _, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		defer db.Close()
+
+		h := New(db)
+
+		err := h.Update(c)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.JSONEq(t, `{"messages":["code=400, message=Unmarshal type error: expected=transaction.Transaction, got=array, field=, offset=1, internal=json: cannot unmarshal array into Go value of type transaction.Transaction"]}`, rec.Body.String())
 	})
 }

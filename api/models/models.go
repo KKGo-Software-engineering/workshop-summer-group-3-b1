@@ -11,4 +11,3 @@ type Transaction struct {
 	Note     string    `db:"note" json:"note"`
 	ImageURL string    `db:"image_url" json:"image_url"`
 }
-
