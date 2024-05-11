@@ -37,6 +37,9 @@ func New(db *sql.DB, cfg config.Config, logger *zap.Logger) *Server {
 		h := spender.New(cfg.FeatureFlag, db)
 		v1.GET("/spenders", h.GetAll)
 		v1.POST("/spenders", h.Create)
+
+		v1.GET("/spenders/:id/transactions/summary", h.GetTransactionsSummary)
+		v1.GET("/spenders/:id", h.GetSpenderByID)
 	}
 
 	{
