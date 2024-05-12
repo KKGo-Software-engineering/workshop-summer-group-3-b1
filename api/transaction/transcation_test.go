@@ -320,3 +320,41 @@ func TestGetAllTransaction(t *testing.T) {
 		assert.Equal(t, "null", strings.Trim(rec.Body.String(), "\n"))
 	})
 }
+
+func TestCreateTransaction(t *testing.T) {
+	t.Run("given transaction information should create transaction", func(t *testing.T) {
+		e := echo.New()
+		defer e.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`
+			{
+				"date": "2024-05-11 15:04:05",
+				"category": "food",
+				"amount": 30,
+				"transaction_type": "expense",
+				"note": "",
+				"image_url": "",
+				"spender_id": 1
+			}
+		`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		db, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		defer db.Close()
+
+		rows := sqlmock.NewRows([]string{"id"}).AddRow("1")
+
+		expectedQuery := mock.ExpectQuery(`INSERT INTO transaction ( date, amount, category, transaction_type, note, image_url, spender_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id;`)
+		expectedQuery.WithArgs("2024-05-11 15:04:05", 30.0, "food", "expense", "", "", 1)
+		expectedQuery.WillReturnRows(rows)
+
+		h := New(db)
+
+		err := h.Create(c)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusCreated, rec.Code)
+
+	})
+}
