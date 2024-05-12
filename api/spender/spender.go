@@ -2,6 +2,7 @@ package spender
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 
 	"github.com/KKGo-Software-engineering/workshop-summer/api/config"
@@ -80,6 +81,33 @@ func (h handler) GetAll(c echo.Context) error {
 	return c.JSON(http.StatusOK, sps)
 }
 
+func (h handler) GetByID(c echo.Context) error {
+	ctx := c.Request().Context()
+	logger := mlog.L(c)
+
+	id := c.Param("id")
+	rows, err := h.db.QueryContext(ctx, `SELECT id, name, email FROM spender WHERE id = $1`, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			logger.Warn("spender not found", zap.String("id", id))
+			return c.JSON(http.StatusNotFound, "spender not found")
+		}
+
+		logger.Error("query error", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+	defer rows.Close()
+	sp := Spender{}
+	for rows.Next() {
+		if err := rows.Scan(&sp.ID, &sp.Name, &sp.Email); err != nil {
+			logger.Error("scan error", zap.Error(err))
+			return c.JSON(http.StatusInternalServerError, err.Error())
+		}
+	}
+
+	return c.JSON(http.StatusOK, sp)
+}
+
 // GetTransactionsSummary returns the summary of total income, total expense, and current balance
 // from the transaction table. The response is a map with the following keys:
 // - total_income: total income amount
@@ -88,11 +116,12 @@ func (h handler) GetAll(c echo.Context) error {
 func (h handler) GetTransactionsSummary(c echo.Context) error {
 	ctx := c.Request().Context()
 	logger := mlog.L(c)
+
 	id := c.Param("id")
 	rows, err := h.db.QueryContext(ctx, `
 		SELECT
 			SUM(amount) AS total, transaction_type
-		FROM "transaction"
+		FROM transaction
 		WHERE spender_id = $1
 		GROUP BY transaction_type
 	`, id)
@@ -118,33 +147,17 @@ func (h handler) GetTransactionsSummary(c echo.Context) error {
 		}
 	}
 
-	summary := map[string]float64{
-		"total_income":    totalIncome,
-		"total_expense":   totalExpense,
-		"current_balance": totalIncome - totalExpense,
+	type transactionSummary struct {
+		TotalIncome    float64 `json:"total_income"`
+		TotalExpense   float64 `json:"total_expense"`
+		CurrentBalance float64 `json:"current_balance"`
 	}
-	res := make(map[string]interface{})
-	res["summary"] = summary
-	return c.JSON(http.StatusOK, res)
-}
 
-func (h handler) GetSpenderByID(c echo.Context) error {
-
-	ctx := c.Request().Context()
-	logger := mlog.L(c)
-	id := c.Param("id")
-	rows, err := h.db.QueryContext(ctx, `SELECT id, "name", email FROM spender WHERE id = $1`, id)
-	if err != nil {
-		logger.Error("query error", zap.Error(err))
-		return c.JSON(http.StatusInternalServerError, err.Error())
-	}
-	defer rows.Close()
-	data := Spender{}
-	for rows.Next() {
-		if err := rows.Scan(&data.ID, &data.Name, &data.Email); err != nil {
-			logger.Error("scan error", zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, err.Error())
-		}
-	}
-	return c.JSON(http.StatusOK, data)
+	return c.JSON(http.StatusOK, map[string]transactionSummary{
+		"summary": {
+			TotalIncome:    totalIncome,
+			TotalExpense:   totalExpense,
+			CurrentBalance: totalIncome - totalExpense,
+		},
+	})
 }

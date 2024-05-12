@@ -1,6 +1,8 @@
 package spender
 
 import (
+	"database/sql"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -144,39 +146,6 @@ func TestGetAllSpender(t *testing.T) {
 	})
 }
 
-func TestGetTransactionSummary(t *testing.T) {
-	t.Run("get transaction summary of spender successfully", func(t *testing.T) {
-		e := echo.New()
-		defer e.Close()
-
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		db, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-		defer db.Close()
-
-		rows := sqlmock.NewRows([]string{"total", "transaction_type"}).
-			AddRow(2000, "income").
-			AddRow(1000, "expense")
-		mock.ExpectQuery(`
-		SELECT
-			SUM(amount) AS total, transaction_type
-		FROM "transaction"
-		WHERE spender_id = $1
-		GROUP BY transaction_type
-        `).WillReturnRows(rows)
-
-		h := New(config.FeatureFlag{}, db)
-		err := h.GetTransactionsSummary(c)
-		// fmt.Println("recorder", rec)
-
-		assert.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.JSONEq(t, `{"summary": { "total_income": 2000, "total_expense": 1000, "current_balance": 1000 }}`, rec.Body.String())
-	})
-}
-
 func TestGetSpenderByID(t *testing.T) {
 	t.Run("get spender by id successfully", func(t *testing.T) {
 		e := echo.New()
@@ -188,19 +157,128 @@ func TestGetSpenderByID(t *testing.T) {
 		c.SetParamNames("id")
 		c.SetParamValues("1")
 
-		db, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		assert.NoError(t, err)
 		defer db.Close()
 
 		rows := sqlmock.NewRows([]string{"id", "name", "email"}).
 			AddRow(1, "HongJot", "hongjot@email.com")
 
-		mock.ExpectQuery(`SELECT id, "name", email FROM spender WHERE id = $1`).WithArgs("1").WillReturnRows(rows)
+		mock.ExpectQuery(`SELECT id, name, email FROM spender WHERE id = $1`).WithArgs("1").WillReturnRows(rows)
 
 		h := New(config.FeatureFlag{}, db)
-		err := h.GetSpenderByID(c)
+		err = h.GetByID(c)
 
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.JSONEq(t, `{"id": 1, "name": "HongJot", "email": "hongjot@email.com"}`, rec.Body.String())
+	})
+
+	t.Run("get spender by id not found", func(t *testing.T) {
+		e := echo.New()
+		defer e.Close()
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues("1")
+
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		assert.NoError(t, err)
+		defer db.Close()
+
+		mock.ExpectQuery(`SELECT id, name, email FROM spender WHERE id = $1`).WithArgs("1").WillReturnError(sql.ErrNoRows)
+
+		h := New(config.FeatureFlag{}, db)
+		err = h.GetByID(c)
+
+		fmt.Println("recorder", rec)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("get spender by id failed on database", func(t *testing.T) {
+		e := echo.New()
+		defer e.Close()
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues("1")
+
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		assert.NoError(t, err)
+		defer db.Close()
+
+		mock.ExpectQuery(`SELECT id, name, email FROM spender WHERE id = $1`).WithArgs("1").WillReturnError(assert.AnError)
+
+		h := New(config.FeatureFlag{}, db)
+		err = h.GetByID(c)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	})
+}
+
+func TestGetTransactionSummary(t *testing.T) {
+	t.Run("get transaction summary of spender successfully", func(t *testing.T) {
+		e := echo.New()
+		defer e.Close()
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		assert.NoError(t, err)
+		defer db.Close()
+
+		rows := sqlmock.NewRows([]string{"total", "transaction_type"}).
+			AddRow(2000, "income").
+			AddRow(1000, "expense")
+		mock.ExpectQuery(`
+		SELECT
+			SUM(amount) AS total, transaction_type
+		FROM transaction
+		WHERE spender_id = $1
+		GROUP BY transaction_type
+        `).WillReturnRows(rows)
+
+		h := New(config.FeatureFlag{}, db)
+		err = h.GetTransactionsSummary(c)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.JSONEq(t, `{"summary": { "total_income": 2000, "total_expense": 1000, "current_balance": 1000 }}`, rec.Body.String())
+	})
+
+	t.Run("get transaction summary failed on database", func(t *testing.T) {
+		e := echo.New()
+		defer e.Close()
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		assert.NoError(t, err)
+		defer db.Close()
+
+		mock.ExpectQuery(`
+		SELECT
+			SUM(amount) AS total, transaction_type
+		FROM transaction
+		WHERE spender_id = $1
+		GROUP BY transaction_type
+        `).WillReturnError(assert.AnError)
+
+		h := New(config.FeatureFlag{}, db)
+		err = h.GetTransactionsSummary(c)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	})
 }
