@@ -266,7 +266,37 @@ func TestUpdateTransactionByID(t *testing.T) {
 }
 
 func TestGetAllTransaction(t *testing.T) {
-	t.Run("should return list of transaction when trasaction exists", func(t *testing.T) {})
+	t.Run("should return list of transaction when trasaction exists", func(t *testing.T) {
+		e := echo.New()
+		defer e.Close()
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		db, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		defer db.Close()
+
+		rows := sqlmock.NewRows([]string{"id", "date", "amount", "category", "transaction_type", "note", "image_url", "spender_id"}).
+			AddRow(1, "2024-05-11 15:04:05", 30, "food", "expense", "", "", 1)
+		mock.ExpectQuery(`SELECT * FROM transaction`).WillReturnRows(rows)
+
+		h := New(db)
+
+		err := h.GetAll(c)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.JSONEq(t, `[{
+			"id": 1,
+			"date": "2024-05-11 15:04:05",
+			"category": "food",
+			"amount": 30,
+			"transaction_type": "expense",
+			"note": "",
+			"image_url": "",
+			"spender_id": 1
+		}]`, rec.Body.String())
+	})
 
 	t.Run("should return null of transaction when trasaction not exists", func(t *testing.T) {})
 }
