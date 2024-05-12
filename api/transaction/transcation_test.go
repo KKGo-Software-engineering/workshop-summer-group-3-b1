@@ -264,3 +264,9 @@ func TestUpdateTransactionByID(t *testing.T) {
 		assert.JSONEq(t, `{"messages":["code=400, message=Unmarshal type error: expected=transaction.Transactions, got=array, field=, offset=1, internal=json: cannot unmarshal array into Go value of type transaction.Transactions"]}`, rec.Body.String())
 	})
 }
+
+func TestGetAllTransaction(t *testing.T) {
+	t.Run("should return list of transaction when trasaction exists", func(t *testing.T) {})
+
+	t.Run("should return null of transaction when trasaction not exists", func(t *testing.T) {})
+}
