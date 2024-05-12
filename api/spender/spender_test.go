@@ -259,7 +259,7 @@ func TestGetTransactionBySpenderID(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/?page=1&per_page=5", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetPath("/transactions/:id")
+		c.SetPath("/spenders/:id/transactions/summary")
 		params := utils.KeyValuePairs{"id": "1"}
 		utils.SetParams(c, params)
 
