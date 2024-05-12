@@ -289,4 +289,46 @@ func TestGetTransactionBySpenderID(t *testing.T) {
 		assert.JSONEq(t, rec.Body.String(), `{"transactions":[{"id":1,"date":"2021-01-01","amount":100,"category":"food","transaction_type":"expense","note":"","image_url":"","spender_id":1},{"id":2,"date":"2021-01-02","amount":200,"category":"saving","transaction_type":"income","note":"","image_url":"","spender_id":1}],"summary":{"total_income":200,"total_expenses":100,"current_balance":100},"pagination":{"current_page":1,"total_pages":1,"per_page":5}}`)
 	})
 
+	t.Run("given invalid page should return error", func(t *testing.T) {
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/?page=invalid-page&per_page=5", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/spenders/:id/transactions/summary")
+		params := utils.KeyValuePairs{"id": "1"}
+		utils.SetParams(c, params)
+
+		db, _, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		defer db.Close()
+
+		h := New(config.FeatureFlag{}, db)
+
+		err := h.GetTransactionBySpenderID(c)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.JSONEq(t, `{"messages":["strconv.Atoi: parsing \"invalid-page\": invalid syntax"]}`, rec.Body.String())
+	})
+
+	t.Run("given invalid per_page should return error", func(t *testing.T) {
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/?page=1&per_page=invalid-per-page", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/spenders/:id/transactions/summary")
+		params := utils.KeyValuePairs{"id": "1"}
+		utils.SetParams(c, params)
+
+		db, _, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		defer db.Close()
+
+		h := New(config.FeatureFlag{}, db)
+
+		err := h.GetTransactionBySpenderID(c)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.JSONEq(t, `{"messages":["strconv.Atoi: parsing \"invalid-per-page\": invalid syntax"]}`, rec.Body.String())
+	})
+
 }
