@@ -11,8 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
-type Transactions struct {
-	ID              int     `db:"id" json:"id"`
+type Transaction struct {
+	ID              uint    `db:"id" json:"id,omitempty"`
 	Date            string  `db:"date" json:"date" validate:"required"`
 	Amount          float64 `db:"amount" json:"amount" validate:"required,gt=0"`
 	Category        string  `db:"category" json:"category" validate:"required"`
@@ -21,6 +21,8 @@ type Transactions struct {
 	ImageURL        string  `db:"image_url" json:"image_url"`
 	SpenderID       int     `db:"spender_id" json:"spender_id"`
 }
+
+type Transactions Transaction
 
 type handler struct {
 	db *sql.DB
@@ -120,6 +122,6 @@ func (h handler) Create(c echo.Context) error {
 	}
 
 	logger.Info("create successfully", zap.Int("id", id))
-	tx.ID = id
+	tx.ID = uint(id)
 	return c.JSON(http.StatusCreated, tx)
 }

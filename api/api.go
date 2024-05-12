@@ -40,6 +40,8 @@ func New(db *sql.DB, cfg config.Config, logger *zap.Logger) *Server {
 		v1.GET("/spenders/:id", h.GetByID)
 		v1.POST("/spenders", h.Create)
 		v1.GET("/spenders/:id/transactions/summary", h.GetTransactionsSummary)
+		v1.GET("/spenders/:id", h.GetSpenderByID)
+		v1.GET("/spenders/:id/transactions", h.GetTransactionBySpenderID)
 	}
 
 	{

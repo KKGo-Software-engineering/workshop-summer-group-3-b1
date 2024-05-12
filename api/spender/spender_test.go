@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/KKGo-Software-engineering/workshop-summer/api/utils"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/KKGo-Software-engineering/workshop-summer/api/config"
 	"github.com/labstack/echo/v4"
@@ -146,6 +148,34 @@ func TestGetAllSpender(t *testing.T) {
 	})
 }
 
+func TestGetTransactionSummary(t *testing.T) {
+	t.Run("get transaction summary of spender successfully", func(t *testing.T) {
+		e := echo.New()
+		defer e.Close()
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		params := utils.KeyValuePairs{"id": "1"}
+		utils.SetParams(c, params)
+
+		db, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		defer db.Close()
+
+		rows := sqlmock.NewRows([]string{"total", "transaction_type"}).
+			AddRow(2000, "income").
+			AddRow(1000, "expense")
+		mock.ExpectQuery(sumStmt).WithArgs(1).WillReturnRows(rows)
+
+		h := New(config.FeatureFlag{}, db)
+		err := h.GetTransactionsSummary(c)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.JSONEq(t, `{"summary": { "total_income": 2000, "total_expenses": 1000, "current_balance": 1000 }}`, rec.Body.String())
+	})
+}
+
 func TestGetSpenderByID(t *testing.T) {
 	t.Run("get spender by id successfully", func(t *testing.T) {
 		e := echo.New()
@@ -223,62 +253,40 @@ func TestGetSpenderByID(t *testing.T) {
 	})
 }
 
-func TestGetTransactionSummary(t *testing.T) {
-	t.Run("get transaction summary of spender successfully", func(t *testing.T) {
+func TestGetTransactionBySpenderID(t *testing.T) {
+	t.Run("given valid information should return success", func(t *testing.T) {
 		e := echo.New()
-		defer e.Close()
-
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequest(http.MethodGet, "/?page=1&per_page=5", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
+		c.SetPath("/transactions/:id")
+		params := utils.KeyValuePairs{"id": "1"}
+		utils.SetParams(c, params)
 
-		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-		assert.NoError(t, err)
+		db, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		defer db.Close()
 
-		rows := sqlmock.NewRows([]string{"total", "transaction_type"}).
-			AddRow(2000, "income").
-			AddRow(1000, "expense")
-		mock.ExpectQuery(`
-		SELECT
-			SUM(amount) AS total, transaction_type
-		FROM transaction
-		WHERE spender_id = $1
-		GROUP BY transaction_type
-        `).WillReturnRows(rows)
-
 		h := New(config.FeatureFlag{}, db)
-		err = h.GetTransactionsSummary(c)
+
+		mock.ExpectQuery(getTxStmt).
+			WithArgs(1, 5, 0).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "date", "amount", "category", "transaction_type", "note", "image_url", "spender_id"}).
+				AddRow(1, "2021-01-01", 100.0, "food", "expense", "", "", 1).
+				AddRow(2, "2021-01-02", 200.0, "saving", "income", "", "", 1))
+
+		mock.ExpectQuery(sumStmt).
+			WithArgs(1).
+			WillReturnRows(sqlmock.NewRows([]string{"total", "transaction_type"}).AddRow(200, "income").AddRow(100, "expense"))
+
+		mock.ExpectQuery(countTxStmt).
+			WithArgs(1).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
+
+		err := h.GetTransactionBySpenderID(c)
 
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.JSONEq(t, `{"summary": { "total_income": 2000, "total_expense": 1000, "current_balance": 1000 }}`, rec.Body.String())
+		assert.JSONEq(t, rec.Body.String(), `{"transactions":[{"id":1,"date":"2021-01-01","amount":100,"category":"food","transaction_type":"expense","note":"","image_url":"","spender_id":1},{"id":2,"date":"2021-01-02","amount":200,"category":"saving","transaction_type":"income","note":"","image_url":"","spender_id":1}],"summary":{"total_income":200,"total_expenses":100,"current_balance":100},"pagination":{"current_page":1,"total_pages":1,"per_page":5}}`)
 	})
 
-	t.Run("get transaction summary failed on database", func(t *testing.T) {
-		e := echo.New()
-		defer e.Close()
-
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-		assert.NoError(t, err)
-		defer db.Close()
-
-		mock.ExpectQuery(`
-		SELECT
-			SUM(amount) AS total, transaction_type
-		FROM transaction
-		WHERE spender_id = $1
-		GROUP BY transaction_type
-        `).WillReturnError(assert.AnError)
-
-		h := New(config.FeatureFlag{}, db)
-		err = h.GetTransactionsSummary(c)
-
-		assert.NoError(t, err)
-		assert.Equal(t, http.StatusInternalServerError, rec.Code)
-	})
 }
