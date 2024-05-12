@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+
 	"github.com/KKGo-Software-engineering/workshop-summer/api/transaction"
 	"github.com/go-playground/validator/v10"
 
@@ -44,6 +45,8 @@ func New(db *sql.DB, cfg config.Config, logger *zap.Logger) *Server {
 	{
 		h := transaction.New(db)
 		v1.PUT("/transactions/:id", h.Update)
+		v1.GET("/transactions", h.GetAll)
+		v1.POST("/transactions", h.Create)
 	}
 
 	return &Server{e}

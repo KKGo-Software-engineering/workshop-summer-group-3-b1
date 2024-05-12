@@ -1,6 +1,11 @@
 package transaction
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/KKGo-Software-engineering/workshop-summer/api/errs"
 	"github.com/KKGo-Software-engineering/workshop-summer/api/utils"
@@ -8,10 +13,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
 )
 
 func TestUpdateTransactionByID(t *testing.T) {
@@ -21,8 +22,8 @@ func TestUpdateTransactionByID(t *testing.T) {
 		defer e.Close()
 
 		type Mock struct {
-			Arg          Transaction
-			ReturningRow Transaction
+			Arg          Transactions
+			ReturningRow Transactions
 		}
 
 		type TestCase struct {
@@ -31,13 +32,13 @@ func TestUpdateTransactionByID(t *testing.T) {
 			Mock     Mock
 		}
 
-		cols := []string{"date", "amount", "category", "transaction_type", "note", "image_url"}
+		cols := []string{"id", "date", "amount", "category", "transaction_type", "note", "image_url", "spender_id"}
 		tcs := []TestCase{
 			{
-				Request:  `{"date": "2024-05-11 15:04:05","amount": 25.5,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
-				Expected: `{"date": "2024-05-11 15:04:05","amount": 25.5,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
+				Request:  `{"date": "2024-05-11 15:04:05","amount": 25.5,"category": "food","transaction_type": "income","note": "","image_url": "", "spender_id": 1}`,
+				Expected: `{"id": 1, "date": "2024-05-11 15:04:05","amount": 25.5,"category": "food","transaction_type": "income","note": "","image_url": "", "spender_id": 1}`,
 				Mock: Mock{
-					Arg: Transaction{
+					Arg: Transactions{
 						Date:            "2024-05-11 15:04:05",
 						Amount:          25.5,
 						Category:        "food",
@@ -45,21 +46,23 @@ func TestUpdateTransactionByID(t *testing.T) {
 						Note:            "",
 						ImageURL:        "",
 					},
-					ReturningRow: Transaction{
+					ReturningRow: Transactions{
+						ID:              1,
 						Date:            "2024-05-11 15:04:05",
 						Amount:          25.5,
 						Category:        "food",
 						TransactionType: "income",
 						Note:            "",
 						ImageURL:        "",
+						SpenderID:       1,
 					},
 				},
 			},
 			{
-				Request:  `{"date": "2024-05-11 15:04:05","amount": 30,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
-				Expected: `{"date": "2024-05-11 15:04:05","amount": 30,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
+				Request:  `{"date": "2024-05-11 15:04:05","amount": 30,"category": "food","transaction_type": "income","note": "","image_url": "", "spender_id": 1}`,
+				Expected: `{"id": 1, "date": "2024-05-11 15:04:05","amount": 30,"category": "food","transaction_type": "income","note": "","image_url": "", "spender_id": 1}`,
 				Mock: Mock{
-					Arg: Transaction{
+					Arg: Transactions{
 						Date:            "2024-05-11 15:04:05",
 						Amount:          30,
 						Category:        "food",
@@ -67,13 +70,15 @@ func TestUpdateTransactionByID(t *testing.T) {
 						Note:            "",
 						ImageURL:        "",
 					},
-					ReturningRow: Transaction{
+					ReturningRow: Transactions{
+						ID:              1,
 						Date:            "2024-05-11 15:04:05",
 						Amount:          30,
 						Category:        "food",
 						TransactionType: "income",
 						Note:            "",
 						ImageURL:        "",
+						SpenderID:       1,
 					},
 				},
 			},
@@ -94,7 +99,7 @@ func TestUpdateTransactionByID(t *testing.T) {
 
 			returningRow := tc.Mock.ReturningRow
 			arg := tc.Mock.Arg
-			row := sqlmock.NewRows(cols).AddRow(returningRow.Date, returningRow.Amount, returningRow.Category, returningRow.TransactionType, returningRow.Note, returningRow.ImageURL)
+			row := sqlmock.NewRows(cols).AddRow(returningRow.ID, returningRow.Date, returningRow.Amount, returningRow.Category, returningRow.TransactionType, returningRow.Note, returningRow.ImageURL, returningRow.SpenderID)
 			mock.ExpectQuery(updateTxStmt).WithArgs(arg.Date, arg.Amount, arg.Category, arg.TransactionType, arg.Note, arg.ImageURL, 1).WillReturnRows(row)
 
 			err := h.Update(c)
@@ -110,7 +115,7 @@ func TestUpdateTransactionByID(t *testing.T) {
 		e.Validator = &cv.CustomValidator{Validator: validator.New()}
 		defer e.Close()
 
-		arg := Transaction{
+		arg := Transactions{
 			Date:            "2024-05-11 15:04:05",
 			Amount:          30,
 			Category:        "food",
@@ -156,27 +161,33 @@ func TestUpdateTransactionByID(t *testing.T) {
 
 		tcs := []TestCase{
 			{
-				Request:  `{"date": "2024-05-11 15:04:05","amount": 0,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
+				Request: `{
+					"date": "2024-05-11 15:04:05",
+					"category": "food",
+					"transaction_type": "income",
+					"note": "", "image_url": "",
+					"spender_id": 1
+				}`,
 				Expected: `{"messages":["field Amount is required"]}`,
 			},
 			{
-				Request:  `{"date": "2024-05-11 15:04:05","amount": -1,"category": "food","transaction_type": "income","note": "","image_url": ""}`,
+				Request:  `{"date": "2024-05-11 15:04:05","amount": -1,"category": "food","transaction_type": "income","note": "","image_url": "", "spender_id": 1}`,
 				Expected: `{"messages":["the value of Amount must be greater than 0"]}`,
 			},
 			{
-				Request:  `{"date": "2024-05-11 15:04:05","amount": 25,"category": "food","transaction_type": "invalid-transaction-type","note": "","image_url": ""}`,
+				Request:  `{"date": "2024-05-11 15:04:05","amount": 25,"category": "food","transaction_type": "invalid-transaction-type","note": "","image_url": "", "spender_id": 1}`,
 				Expected: `{"messages":["the value of TransactionType must be one of income expense"]}`,
 			},
 			{
-				Request:  `{"date": "2024-05-11 15:04:05","amount": 25,"category": "","transaction_type": "income","note": "","image_url": ""}`,
+				Request:  `{"date": "2024-05-11 15:04:05","amount": 25,"category": "","transaction_type": "income","note": "","image_url": "", "spender_id": 1}`,
 				Expected: `{"messages":["field Category is required"]}`,
 			},
 			{
-				Request:  `{"date": "2024-05-11 15:04:05","amount": 25,"category": "","transaction_type": "","note": "","image_url": ""}`,
+				Request:  `{"date": "2024-05-11 15:04:05","amount": 25,"category": "","transaction_type": "","note": "","image_url": "", "spender_id": 1}`,
 				Expected: `{"messages":["field Category is required","field TransactionType is required"]}`,
 			},
 			{
-				Request:  `{"date": "2024-05-11 15:04:05","amount": -1,"category": "","transaction_type": "","note": "","image_url": ""}`,
+				Request:  `{"date": "2024-05-11 15:04:05","amount": -1,"category": "","transaction_type": "","note": "","image_url": "", "spender_id": 1}`,
 				Expected: `{"messages":["the value of Amount must be greater than 0","field Category is required","field TransactionType is required"]}`,
 			},
 		}
@@ -250,6 +261,6 @@ func TestUpdateTransactionByID(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.JSONEq(t, `{"messages":["code=400, message=Unmarshal type error: expected=transaction.Transaction, got=array, field=, offset=1, internal=json: cannot unmarshal array into Go value of type transaction.Transaction"]}`, rec.Body.String())
+		assert.JSONEq(t, `{"messages":["code=400, message=Unmarshal type error: expected=transaction.Transactions, got=array, field=, offset=1, internal=json: cannot unmarshal array into Go value of type transaction.Transactions"]}`, rec.Body.String())
 	})
 }

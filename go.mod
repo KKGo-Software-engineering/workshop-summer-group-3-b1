@@ -5,6 +5,8 @@ go 1.21.9
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/caarlos0/env/v10 v10.0.0
+	github.com/go-playground/universal-translator v0.18.1
+	github.com/go-playground/validator/v10 v10.20.0
 	github.com/google/uuid v1.6.0
 	github.com/kkgo-software-engineering/workshop v0.0.0-20230120144840-066b8bb26aca
 	github.com/labstack/echo/v4 v4.12.0
@@ -20,8 +22,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
-	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.20.0 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
